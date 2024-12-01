@@ -1,71 +1,43 @@
-from google.oauth2 import service_account
-import googleapiclient.discovery
-import os
+from google_sheet_processor import GoogleSheetUtils, DataFrameUtils
 from dotenv import load_dotenv
+import os
 import pandas as pd
-import gspread
 
 # Load environment variables from .env
 load_dotenv()
 
-# Get the path to the service account JSON file
-service_account_file = os.getenv('SERVICE_ACCOUNT_FILE')
-
-# Validate the file path
-if not service_account_file or not os.path.exists(service_account_file):
-    raise FileNotFoundError(f"Service account file not found: {service_account_file}")
-
-# Use the credentials
-credentials = service_account.Credentials.from_service_account_file(service_account_file)
-
+# Retrieve the spreadsheet ID from the .env file
 spreadsheet_id = os.getenv("SPREADSHEET_ID")
 
-if not spreadsheet_id:
-    raise ValueError("SPREADSHEET_ID is not set in the .env file")
+gsheet_utils = GoogleSheetUtils()
+dataframe_utils = DataFrameUtils()
 
+# Get the path to the service account JSON file
+credentials = gsheet_utils.load_credentials("inv-cn-creation.json")
 
 # Build the Sheets API service
-service = googleapiclient.discovery.build('sheets', 'v4', credentials=credentials)
+service_api = gsheet_utils.build_service(credentials)
 
-# Use the spreadsheet ID to interact with the Sheets API
-spreadsheet = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+# Fetch data from the Google Sheet
+sheet_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "RITP", range_="A:AC")
 
-sheet_range = "RITP!A:Y"
-responses = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=sheet_range).execute()
+df_raw = dataframe_utils.process_data_to_dataframe(sheet_data)
+df_true, df_false= dataframe_utils.filter_dataframe(df_raw, "Is this your first time submitting this form for a Credit Note?",
+                                 "Yes", (7,25), (3,5))
+# Output the resulting DataFrames
+print("Filtered DataFrame (True Condition):")
+print(df_true)
 
-# Extract the data from the 'values' key if it exists in the dictionary
-if isinstance(responses, dict) and 'values' in responses:
-    data = responses['values']
+print("\nFiltered DataFrame (False Condition):")
+print(df_false)
 
-    # Check if there is data to work with
-    if data:
-        # Convert the list of rows into a pandas DataFrame
-        df = pd.DataFrame(data)
+df_true = dataframe_utils.handle_trip_ids(df_true, "Trip ID")
+print(df_true)
 
-        # Use the first row (index 0) as the column headers
-        new_header = df.iloc[0]  # The first row
-        df = df[1:]  # Remove the first row (which is now the header)
-        df.columns = new_header  # Set the header
+sf_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "OptInvID", range_="A:J")
+sf_df = dataframe_utils.process_data_to_dataframe(sf_data)
 
-        # Now, let's inspect the DataFrame and print the first few rows
-        print("DataFrame with updated headers:")
-        print(df.head())  # Print first 5 rows to check
+df_true_2 = dataframe_utils.match_trip_details(df_true, sf_df, "trip id")  # Correct trip column here
+print(df_true_2)
 
-        # If needed, adjust missing values
-        df.fillna("N/A", inplace=True)  # Example: Fill N/A for missing values
-    else:
-        print("The 'values' list is empty.")
-else:
-    print("The expected 'values' key is missing in the responses dictionary.")
-
-
-# Filter rows based on the column value
-df_1 = df[df["Is this your first time submitting this form for a Credit Note?"] == "Yes"].iloc[:, 7:24]
-df_2 = df[df["Is this your first time submitting this form for a Credit Note?"] == "No"].iloc[:, 3:5]
-
-# Display the resulting DataFrames
-print("DataFrame df_1 (H to Y for 'yes'):")
-print(df_1)
-
-print("\nDataFrame df_2 (D to G for others):")
-print(df_2)
+gsheet_utils.update_sheet_with_dataframe(service_api,df_true_2,spreadsheet_id,"DB")
