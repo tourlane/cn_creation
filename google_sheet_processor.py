@@ -1,9 +1,9 @@
+expanded_rows = []
 import pandas as pd
 from google.oauth2 import service_account
 import googleapiclient.discovery
-from googleapiclient.errors import HttpError
 import os
-from dotenv import load_dotenv
+import re
 
 
 class GoogleSheetUtils:
@@ -32,7 +32,7 @@ class GoogleSheetUtils:
         return []
 
     @staticmethod
-    def update_sheet_with_dataframe(service, df, spreadsheet_id, tab_name, start_cell="A2", include_index=False):
+    def update_sheet_with_dataframe(service, df, spreadsheet_id, tab_name, start_cell="A2"):
         """Updates a Google Sheet with a DataFrame."""
         try:
             # Convert DataFrame to list of lists (for use with Google Sheets API)
@@ -62,6 +62,41 @@ class GoogleSheetUtils:
             print(f"Data successfully written to {tab_name} at {start_cell}")
         except Exception as e:
             print(f"An error occurred: {e}")
+
+    @staticmethod
+    def update_cells(service_api, spreadsheet_id, sheet_name, value_dict):
+        for cell, value in value_dict.items():
+            body = {
+                "values": [[value]]
+            }
+            service_api.spreadsheets().values().update(
+                spreadsheetId=spreadsheet_id,
+                range=f"{sheet_name}!{cell}",
+                valueInputOption="RAW",
+                body=body
+            ).execute()
+
+    @staticmethod
+    def copy_sheet(service, spreadsheet_id, template_sheet_name, new_sheet_name):
+        # Get the sheet ID of the template sheet
+        sheets = service.spreadsheets().get(spreadsheetId=spreadsheet_id).execute()
+        sheet_id = None
+        for sheet in sheets["sheets"]:
+            if sheet["properties"]["title"] == template_sheet_name:
+                sheet_id = sheet["properties"]["sheetId"]
+                break
+
+        # Copy the template sheet to create a new sheet with the given name
+        request = {
+            "requests": [{
+                "duplicateSheet": {
+                    "sourceSheetId": sheet_id,
+                    "newSheetName": new_sheet_name
+                }
+            }]
+        }
+        service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=request).execute()
+
 
 class DataFrameUtils:
     @staticmethod
@@ -113,22 +148,33 @@ class DataFrameUtils:
 
     @staticmethod
     def handle_trip_ids(df, trip_column):
-        """Handle trip IDs by splitting comma-separated values into individual rows."""
-        expanded_rows = []
+        """
+        Process a DataFrame by splitting trip IDs into individual rows,
+        then filter out rows with invalid Trip ID values.
+        """
+        expanded_rows = []  # Initialize a list to store expanded rows
 
-        for _, row in df.iterrows():
-            trip_ids = str(row[trip_column]).split(',')  # Split trip IDs by commas
-            trip_ids = [trip_id.strip() for trip_id in trip_ids]  # Remove spaces
+        for index, row in df.iterrows():
+            try:
+                # Split trip IDs by ',' or ' ' and handle possible formatting issues
+                trip_ids = re.split(r'[,\s]+', str(row[trip_column]).strip())  # Ensure no leading/trailing spaces
 
-            # Create a new row for each trip ID, keeping other data the same
-            for trip_id in trip_ids:
-                new_row = row.copy()
-                new_row[trip_column] = trip_id  # Replace with the new trip ID
-                expanded_rows.append(new_row)
+                # Create a new row for each trip ID
+                for trip_id in trip_ids:
+                    new_row = row.copy()
+                    new_row[trip_column] = trip_id  # Replace the trip column with the individual ID
+                    expanded_rows.append(new_row)
+
+            except Exception as e:
+                print(f"Error processing row at index {index}: {e}")
 
         # Convert the expanded rows back into a DataFrame
         expanded_df = pd.DataFrame(expanded_rows)
-        return expanded_df
+
+        # Filter rows where the Trip ID doesn't start with "T_"
+        filtered_df = expanded_df[expanded_df[trip_column].str.startswith("T-")]
+
+        return filtered_df
 
     @staticmethod
     def match_trip_details(df_1, optinv_df, trip_column):
@@ -138,10 +184,6 @@ class DataFrameUtils:
             df_1.columns = df_1.columns.str.strip()
             optinv_df.columns = optinv_df.columns.str.strip()
 
-            # Print column names for debugging
-            print(f"df_1 columns: {df_1.columns}")
-            print(f"optinv_df columns: {optinv_df.columns}")
-
             # Ensure column names are consistent
             df_1.columns = df_1.columns.str.lower()
             optinv_df.columns = optinv_df.columns.str.lower()
@@ -150,32 +192,59 @@ class DataFrameUtils:
             if "trip id" not in df_1.columns or "trip" not in optinv_df.columns:
                 raise KeyError('The "Trip ID" column was not found in df_1 or "Trip" was not found in optinv_df.')
 
+            # Clean up trip IDs to ensure they are comparable
+            df_1[trip_column] = df_1[trip_column].astype(
+                str).str.strip()  # Ensure the trip ID is a string and strip spaces
+            optinv_df["trip"] = optinv_df["trip"].astype(
+                str).str.strip()  # Ensure the trip column is a string and strip spaces
+
+            # Create a new DataFrame to store the results
+            result_df = pd.DataFrame(columns=df_1.columns)
+
             # Iterate over df_1 rows to match trip details
             for idx, row in df_1.iterrows():
-                trip_id = row[trip_column]  # This corresponds to "Trip ID" in df_1
+                trip_ids = str(row[trip_column]).strip()  # This corresponds to "Trip ID" in df_1
 
-                # Skip matching if trip_id is null
-                if pd.isnull(trip_id):
+                # Skip matching if trip_ids is null
+                if pd.isnull(trip_ids):
                     continue
 
-                trip_id = str(trip_id).strip()  # Ensure trip_id is a string
+                # Split the trip_ids into a list of trip ID strings (in case there are multiple trip IDs in the cell)
+                trip_ids_list = [trip_id.strip() for trip_id in trip_ids.split(",")]
 
-                # Find the matched invoices from optinv_df
-                matched_invoices = optinv_df[optinv_df["trip"] == trip_id]
+                # Flag to track if a match was found for any trip ID
+                matched_any_trip = False
 
-                # If matched invoices exist, merge all columns from optinv_df to df_1
-                if not matched_invoices.empty:
-                    # We will add all matched columns from optinv_df to df_1
-                    for col in matched_invoices.columns:
-                        # If the column exists in df_1, we overwrite, otherwise, we add it
-                        df_1.at[idx, col] = matched_invoices.iloc[0][col]
+                # Iterate over the list of trip IDs to match against optinv_df
+                for trip_id in trip_ids_list:
+                    # Find the matched invoices from optinv_df
+                    matched_invoices = optinv_df[optinv_df["trip"] == trip_id]
 
-            return df_1
+                    # If matched invoices exist, create a new row for each matched trip
+                    if not matched_invoices.empty:
+                        for col in matched_invoices.columns:
+                            row[col] = matched_invoices.iloc[0][col]  # Merge matched row
+
+                        # Add a new row to the result dataframe for each matched trip ID
+                        result_df = pd.concat([result_df, pd.DataFrame([row])], ignore_index=True)
+                        matched_any_trip = True
+                    else:
+                        # If no match is found, leave the columns empty
+                        for col in optinv_df.columns:
+                            row[col] = None  # Set to None to indicate no match
+
+                # If no match was found for any trip ID, ensure the row is still added but with empty columns
+                if not matched_any_trip:
+                    result_df = pd.concat([result_df, pd.DataFrame([row])], ignore_index=True)
+
+            # # Remove duplicates based on the 'Trip' column if necessary
+            # result_df = result_df.drop_duplicates(subset=['trip'])
+
+            return result_df
 
         except Exception as e:
             print(f"Error matching trip details: {e}")
             return df_1
-
     @staticmethod
     def add_cn_number(df, start_cn_number=1000, column="CN Number"):
         """Add a unique Credit Note number in a sequence."""

@@ -31,13 +31,25 @@ print(df_true)
 print("\nFiltered DataFrame (False Condition):")
 print(df_false)
 
+if "Trip ID" not in df_true.columns:
+    print("Column 'Trip ID' not found in DataFrame")
+
+
 df_true = dataframe_utils.handle_trip_ids(df_true, "Trip ID")
 print(df_true)
+
+
 
 sf_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "OptInvID", range_="A:J")
 sf_df = dataframe_utils.process_data_to_dataframe(sf_data)
 
-df_true_2 = dataframe_utils.match_trip_details(df_true, sf_df, "trip id")  # Correct trip column here
-print(df_true_2)
+df_true_2 = dataframe_utils.match_trip_details(df_true, sf_df, "trip id")
 
 gsheet_utils.update_sheet_with_dataframe(service_api,df_true_2,spreadsheet_id,"DB")
+
+
+# # Save df_true_2 to a CSV file
+# csv_file_path = "df_true_2.csv"  # Specify your file path
+# df_true_2.to_csv(csv_file_path, index=False)  # index=False to avoid writing row numbers to the file
+#
+# print(f"DataFrame saved to {csv_file_path}")
