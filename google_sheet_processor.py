@@ -4,6 +4,7 @@ from google.oauth2 import service_account
 import googleapiclient.discovery
 import os
 import re
+import time
 
 
 class GoogleSheetUtils:
@@ -96,6 +97,18 @@ class GoogleSheetUtils:
             }]
         }
         service.spreadsheets().batchUpdate(spreadsheetId=spreadsheet_id, body=request).execute()
+
+    @staticmethod
+    def update_cell_with_delay(sheet_id, cell_range, value):
+        service = googleapiclient.discovery.build('sheets', 'v4', credentials=credentials)
+        body = {"range": cell_range, "values": [[value]], "majorDimension": "ROWS"}
+        service.spreadsheets().values().update(
+            spreadsheetId=sheet_id,
+            range=cell_range,
+            valueInputOption="USER_ENTERED",
+            body=body
+        ).execute()
+        time.sleep(4)  # Add a delay of 1 second
 
 
 class DataFrameUtils:
