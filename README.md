@@ -1,13 +1,15 @@
-GoogleSheetUtils:
-
 1. Modules and Libraries
+   
 • pandas: Used for data manipulation and analysis.
 • google.oauth2.service_account: Handles authentication using Google service
 account credentials.
 • googleapiclient.discovery: Accesses the Google Sheets API.
 • googleapiclient.errors.HttpError: Handles API-related errors.
 • dotenv.load_dotenv: Loads environment variables from a .env file.
+
+
 2. GoogleSheetUtils Class
+   
 This class provides utility functions to interact with Google Sheets.
 a. load_credentials
 • Purpose: Load Google service account credentials from a file.
@@ -31,7 +33,10 @@ d. update_sheet_with_dataframe
 2. Define the range (starting cell).
 3. Use sheet.values().update to write data to the sheet.
 • Error Handling: Catches API errors and prints the error message.
+
+
 3. DataFrameUtils Class
+   
 This class provides functions for pandas DataFrame manipulation.
 a. process_data_to_dataframe
 • Purpose: Convert raw Google Sheets data to a structured pandas DataFrame.
