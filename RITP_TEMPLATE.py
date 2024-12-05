@@ -21,7 +21,7 @@ credentials = gsheet_utils.load_credentials("inv-cn-creation.json")
 service_api = gsheet_utils.build_service(credentials)
 
 # Fetch data from the Google Sheet
-sheet_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "DB", range_="A:AF")
+sheet_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "DB", range_="A:AP")
 
 # Process the data into a DataFrame
 df_raw = dataframe_utils.process_data_to_dataframe(sheet_data)
@@ -29,10 +29,10 @@ df_raw = dataframe_utils.process_data_to_dataframe(sheet_data)
 # Filter data based on 'Invoice No.' column being empty
 df_false_db, df_true_db = dataframe_utils.filter_dataframe(
     df_raw,  # The DataFrame you're working with
-    "Invoice No.",  # Column to check
+    "invoice no.",  # Column to check
     "",  # Filter for empty values
-    (0, 29),  # Optional: Range for rows to consider
-    (0, 29)   # Optional: Additional range for column indices, if needed
+    (0, 41),  # Optional: Range for rows to consider
+    (0, 41)   # Optional: Additional range for column indices, if needed
 )
 
 # Initialize the starting credit note number
@@ -40,15 +40,31 @@ credit_note_counter = 1405
 
 # Define the cell mapping for the "Template"
 cell_mapping = {
-    "A4": "Sales Agent",
-    "A5": "Address Line 1",
-    "A6": "City",
-    "A7": "Post Code/ZIP Code",
-    "A8": "Country"
+    "A4": "sales agent",
+    "A5": "address line 1",
+    "A6": "city postal",
+    "A7": "country",
+    "B8": "taxpayer identification number (tin)",
+    "B9": "vat id",
+    "A11": "iban",
+    "A12": "bic",
+    "G6": "cn number",
+    "B16": "signed date",
+    "F32": "vat percentage",
+    "G32": "vat amount",
+    "B11": "account number",
+    "B12": "swift",
+    "G28": "trustpilot",
 }
 
 multi_row_fields = {
-    "Invoice No.": "A27",  # Starting cell for Invoice No.
+    "trip id": "A19",
+    "invoice no.": "C19",
+    "initial margin (eur)": "E19",
+    "client type": "B19",
+    "grand total": "D19",
+    "commission": "G19",
+    "commission percentage": "F19"
 }
 
 
@@ -85,21 +101,30 @@ def update_cell_with_delay(sheet_id, cell_range, value, credentials):
 
 
 # Group the DataFrame by "Timestamp"
-grouped = df_true_db.groupby("Timestamp")
+grouped = df_true_db.groupby("timestamp")
 
 for timestamp, group in grouped:
     print(f"Processing group for timestamp: {timestamp}")
 
-    if group["Invoice No."].notnull().all():
+    if group["invoice no."].notnull().all():
         # Generate credit note number
         credit_note_number = f"CN-{credit_note_counter:06}"
         credit_note_counter += 1
         print(f"Generated credit note number: {credit_note_number}")
 
         # Copy the template sheet
-        sheet_copy_name = f"CN-{credit_note_number}"
+        sheet_copy_name = f"{credit_note_number}"
         gsheet_utils.copy_sheet(service_api, spreadsheet_id, "Template", sheet_copy_name)
         print(f"Copied template to: {sheet_copy_name}")
+
+        # Update G6 with the credit note number
+        print(f"Updating G6 in {sheet_copy_name} with credit note number 'CN.{credit_note_number}'")
+        update_cell_with_delay(
+            spreadsheet_id,
+            f"{sheet_copy_name}!G6",
+            credit_note_number,
+            credentials
+        )
 
         # Update fixed fields (static mappings) in the template
         first_row = group.iloc[0]
@@ -140,3 +165,66 @@ for timestamp, group in grouped:
                         value,
                         credentials
                     )
+
+
+def locate_and_calculate_tax(template_data, cell_mapping):
+    """
+    Calculate tax dynamically based on the country and net total.
+
+    :param template_data: Dictionary with template data, e.g., cell values.
+    :param cell_mapping: Mapping of template cells to data fields.
+    """
+    # Extract country from the template
+    country_cell = cell_mapping.get("A7", None)
+    country = template_data.get(country_cell, "").strip().lower()
+
+    # Locate the base amount next to "Net Total"
+    base_amount = None
+    for cell, value in template_data.items():
+        if value == "Net Total":  # Look for the "Net Total" label
+            adjacent_cell = get_adjacent_cell(cell, direction="right")  # Define this helper function
+            base_amount = template_data.get(adjacent_cell, 0)
+            break
+
+    # If base amount is found, calculate tax
+    if base_amount is not None and isinstance(base_amount, (int, float)):
+        tax_value = base_amount * 0.19 if country == "Germany" or "Deutschland" else 0
+        # Update the calculated tax in cell A32
+        template_data["A32"] = tax_value
+        print(f"Calculated tax for {country}: {tax_value} written to A32")
+    else:
+        print("Base amount not found or invalid. Cannot calculate tax.")
+
+
+def get_adjacent_cell(current_cell, direction="right"):
+    """
+    Get the adjacent cell reference based on direction (right, left, up, down).
+    :param current_cell: Current cell reference, e.g., "G31".
+    :param direction: Direction to find the adjacent cell.
+    :return: Adjacent cell reference, e.g., "H31".
+    """
+    import re
+    match = re.match(r"([A-Z]+)(\d+)", current_cell)
+    if not match:
+        return None
+    col, row = match.groups()
+    row = int(row)
+    if direction == "right":
+        col = chr(ord(col) + 1)
+    elif direction == "left":
+        col = chr(ord(col) - 1)
+    elif direction == "down":
+        row += 1
+    elif direction == "up":
+        row -= 1
+    return f"{col}{row}"
+
+
+# Example Usage
+template_data = {
+    "A7": "Germany",
+    "G31": "Net Total",
+    "H31": 1000,  # Base amount is in H31
+    "A32": None
+}
+locate_and_calculate_tax(template_data, cell_mapping)
