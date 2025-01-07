@@ -21,50 +21,53 @@ credentials = gsheet_utils.load_credentials("inv-cn-creation.json")
 service_api = gsheet_utils.build_service(credentials)
 
 # Fetch data from the Google Sheet
-sheet_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "DB", range_="A:AP")
+sheet_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "DB", range_="A:BB")
 
 # Process the data into a DataFrame
 df_raw = dataframe_utils.process_data_to_dataframe(sheet_data)
 
+df_raw = df_raw[df_raw['cn_number'] == '#N/A']
+
+
 # Filter data based on 'Invoice No.' column being empty
 df_false_db, df_true_db = dataframe_utils.filter_dataframe(
     df_raw,  # The DataFrame you're working with
-    "invoice no.",  # Column to check
+    "invoice_no.",  # Column to check
     "",  # Filter for empty values
-    (0, 41),  # Optional: Range for rows to consider
-    (0, 41)   # Optional: Additional range for column indices, if needed
+    (0, 54),  # Optional: Range for rows to consider
+    (0, 54)   # Optional: Additional range for column indices, if needed
 )
 
 # Initialize the starting credit note number
-credit_note_counter = 1405
+credit_note_counter = 1425
 
 # Define the cell mapping for the "Template"
 cell_mapping = {
-    "A4": "sales agent",
-    "A5": "address line 1",
-    "A6": "city postal",
+    "A4": "sales_agent",
+    "A5": "address_line_1",
+    "A6": "city_postal",
     "A7": "country",
-    "B8": "taxpayer identification number (tin)",
-    "B9": "vat id",
+    "B8": "tin",
+    "B9": "vat_id",
     "A11": "iban",
     "A12": "bic",
-    "G6": "cn number",
-    "B16": "signed date",
-    "F32": "vat percentage",
-    "G32": "vat amount",
-    "B11": "account number",
+    "B16": "signed_date",
+    "F32": "vat_percentage",
+    "G32": "vat_amount",
+    "B11": "account_number",
     "B12": "swift",
-    "G28": "trustpilot",
+    "G28": "trustpilot_review",
+    "G27" : "traning_day_attendance",
 }
 
 multi_row_fields = {
-    "trip id": "A19",
-    "invoice no.": "C19",
-    "initial margin (eur)": "E19",
-    "client type": "B19",
-    "grand total": "D19",
-    "commission": "G19",
-    "commission percentage": "F19"
+    "trip_id": "A19",
+    "invoice_no.": "C19",
+    "cm1": "E19",
+    "client_type": "B19",
+    "total_bv": "D19",
+    "commission_percentage": "F19",
+    "commission": "G19"
 }
 
 
@@ -106,9 +109,9 @@ grouped = df_true_db.groupby("timestamp")
 for timestamp, group in grouped:
     print(f"Processing group for timestamp: {timestamp}")
 
-    if group["invoice no."].notnull().all():
+    if group["invoice_no."].notnull().all():
         # Generate credit note number
-        credit_note_number = f"CN-{credit_note_counter:06}"
+        credit_note_number = f"CN-RITP_{credit_note_counter:06}"
         credit_note_counter += 1
         print(f"Generated credit note number: {credit_note_number}")
 
