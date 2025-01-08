@@ -33,36 +33,30 @@ class GoogleSheetUtils:
         return []
 
     @staticmethod
-    def update_sheet_with_dataframe(service, df, spreadsheet_id, tab_name, start_cell="A2"):
-        """Updates a Google Sheet with a DataFrame."""
-        try:
-            # Convert DataFrame to list of lists (for use with Google Sheets API)
-            # Replace NaN and None values with an empty string or suitable value
-            df_cleaned = df.fillna("").replace([None, "NaN"], "")
+    def update_sheet_with_dataframe(service, dataframe, spreadsheet_id, sheet_name):
+        # Convert DataFrame to a list of lists
+        data = [dataframe.columns.tolist()] + dataframe.values.tolist()
 
-            # Convert the cleaned DataFrame to a list of lists
-            values = df_cleaned.values.tolist()
+        # Determine the range to clear and update
+        range_to_update = f"{sheet_name}!A1"
 
-            # Prepare the range for the update (based on the starting cell and size of the DataFrame)
-            sheet_range = f"{tab_name}!{start_cell}"
+        # Clear the existing data
+        service.spreadsheets().values().clear(
+            spreadsheetId=spreadsheet_id,
+            range=sheet_name
+        ).execute()
 
-            # Prepare the request to update the sheet
-            body = {
-                'values': values
-            }
-
-            # Use the Sheets API to update the sheet
-            sheet = service.spreadsheets()
-            sheet.values().update(
-                spreadsheetId=spreadsheet_id,
-                range=sheet_range,
-                valueInputOption="RAW",
-                body=body
-            ).execute()
-
-            print(f"Data successfully written to {tab_name} at {start_cell}")
-        except Exception as e:
-            print(f"An error occurred: {e}")
+        # Write the new data
+        body = {
+            "values": data,
+            "majorDimension": "ROWS",
+        }
+        service.spreadsheets().values().update(
+            spreadsheetId=spreadsheet_id,
+            range=range_to_update,
+            valueInputOption="RAW",
+            body=body
+        ).execute()
 
     @staticmethod
     def update_cells(service_api, spreadsheet_id, sheet_name, value_dict):
@@ -191,73 +185,57 @@ class DataFrameUtils:
 
     @staticmethod
     def match_trip_details(df_1, optinv_df, trip_column):
-        """Match trip details from another DataFrame based on a trip column."""
+        """Match trip details from another DataFrame based on a trip column, handling multiple invoices."""
         try:
-            # Strip whitespaces from column names for both DataFrames
-            df_1.columns = df_1.columns.str.strip()
-            optinv_df.columns = optinv_df.columns.str.strip()
+            # Normalize column names for consistency
+            df_1.columns = df_1.columns.str.strip().str.lower()
+            optinv_df.columns = optinv_df.columns.str.strip().str.lower()
 
-            # Ensure column names are consistent
-            df_1.columns = df_1.columns.str.lower()
-            optinv_df.columns = optinv_df.columns.str.lower()
+            # Validate the presence of required columns
+            if trip_column.lower() not in df_1.columns or "trip" not in optinv_df.columns:
+                raise KeyError('Required columns "Trip ID" in df_1 or "Trip" in optinv_df are missing.')
 
-            # Ensure that 'trip id' in df_1 and 'trip' in optinv_df are present
-            if "trip id" not in df_1.columns or "trip" not in optinv_df.columns:
-                raise KeyError('The "Trip ID" column was not found in df_1 or "Trip" was not found in optinv_df.')
+            # Ensure 'Trip ID' and 'Trip' are strings for matching
+            df_1[trip_column] = df_1[trip_column].astype(str).str.strip()
+            optinv_df["trip"] = optinv_df["trip"].astype(str).str.strip()
 
-            # Clean up trip IDs to ensure they are comparable
-            df_1[trip_column] = df_1[trip_column].astype(
-                str).str.strip()  # Ensure the trip ID is a string and strip spaces
-            optinv_df["trip"] = optinv_df["trip"].astype(
-                str).str.strip()  # Ensure the trip column is a string and strip spaces
-
-            # Create a new DataFrame to store the results
+            # Initialize the result DataFrame with the same columns as df_1
             result_df = pd.DataFrame(columns=df_1.columns)
 
-            # Iterate over df_1 rows to match trip details
-            for idx, row in df_1.iterrows():
-                trip_ids = str(row[trip_column]).strip()  # This corresponds to "Trip ID" in df_1
+            # Iterate over df_1 rows
+            for _, row in df_1.iterrows():
+                trip_ids = str(row[trip_column]).strip()
 
-                # Skip matching if trip_ids is null
+                # Skip processing if the trip ID is null
                 if pd.isnull(trip_ids):
                     continue
 
-                # Split the trip_ids into a list of trip ID strings (in case there are multiple trip IDs in the cell)
+                # Split the trip IDs (in case of multiple trip IDs in a cell)
                 trip_ids_list = [trip_id.strip() for trip_id in trip_ids.split(",")]
 
-                # Flag to track if a match was found for any trip ID
-                matched_any_trip = False
-
-                # Iterate over the list of trip IDs to match against optinv_df
+                # Iterate over trip IDs to find matches in optinv_df
                 for trip_id in trip_ids_list:
-                    # Find the matched invoices from optinv_df
+                    # Get all matching rows in optinv_df for the current trip ID
                     matched_invoices = optinv_df[optinv_df["trip"] == trip_id]
 
-                    # If matched invoices exist, create a new row for each matched trip
                     if not matched_invoices.empty:
-                        for col in matched_invoices.columns:
-                            row[col] = matched_invoices.iloc[0][col]  # Merge matched row
-
-                        # Add a new row to the result dataframe for each matched trip ID
-                        result_df = pd.concat([result_df, pd.DataFrame([row])], ignore_index=True)
-                        matched_any_trip = True
+                        # Add a new row to result_df for each match
+                        for _, matched_row in matched_invoices.iterrows():
+                            new_row = row.copy()  # Copy the original row
+                            # Add matched invoice details to the new row
+                            for col in matched_invoices.columns:
+                                new_row[col] = matched_row[col]
+                            result_df = pd.concat([result_df, pd.DataFrame([new_row])], ignore_index=True)
                     else:
-                        # If no match is found, leave the columns empty
-                        for col in optinv_df.columns:
-                            row[col] = None  # Set to None to indicate no match
-
-                # If no match was found for any trip ID, ensure the row is still added but with empty columns
-                if not matched_any_trip:
-                    result_df = pd.concat([result_df, pd.DataFrame([row])], ignore_index=True)
-
-            # # Remove duplicates based on the 'Trip' column if necessary
-            # result_df = result_df.drop_duplicates(subset=['trip'])
+                        # Add the original row without matches if no match is found
+                        result_df = pd.concat([result_df, pd.DataFrame([row])], ignore_index=True)
 
             return result_df
 
         except Exception as e:
             print(f"Error matching trip details: {e}")
             return df_1
+
     @staticmethod
     def add_cn_number(df, start_cn_number=1000, column="CN Number"):
         """Add a unique Credit Note number in a sequence."""
