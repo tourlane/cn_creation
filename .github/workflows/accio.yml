@@ -1,4 +1,4 @@
-name: Offboarding Users
+name: Independent Travel Planners
 
 on:
   workflow_dispatch:
