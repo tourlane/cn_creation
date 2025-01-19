@@ -5,6 +5,7 @@ import googleapiclient.discovery
 import os
 import re
 import time
+import json
 
 
 class GoogleSheetUtils:
@@ -13,7 +14,13 @@ class GoogleSheetUtils:
         """Load credentials from the service account file."""
         if not service_account_file or not os.path.exists(service_account_file):
             raise FileNotFoundError(f"Service account file not found: {service_account_file}")
-        return service_account.Credentials.from_service_account_file(service_account_file)
+
+        # Load the service account JSON file
+        with open(service_account_file, 'r') as f:
+            service_account_info = json.load(f)
+
+        # Return credentials using the loaded JSON
+        return service_account.Credentials.from_service_account_info(service_account_info)
 
     @staticmethod
     def build_service(credentials):
