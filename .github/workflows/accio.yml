@@ -1,0 +1,36 @@
+name: Offboarding Users
+
+on:
+  workflow_dispatch:
+
+jobs:
+  run-deactivate-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v2
+
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies from requirements.txt
+        run: |
+          pip install -r requirements.txt
+          
+      - name: Run Deactivate Users Script
+        env:
+          SPREADSHEET_ID: ${{ secrets.SPREADSHEET_ID }}
+          SHEET_NAME: ${{ secrets.SHEET_NAME }}
+          CREDENTIALS_FILE: ${{ secrets.SERVICE_ACC_FILE }}
+          ATLASSIAN_API_TOKEN_1: ${{ secrets.ATLASSIAN_API_TOKEN_1 }}
+          ATLASSIAN_API_TOKEN_2: ${{ secrets.ATLASSIAN_API_TOKEN_2 }}
+          EMAIL: ${{ secrets.EMAIL }}
+          PAM_API_KEY: ${{ secrets.PAM_API_KEY }}
+          SF_USERNAME: ${{ secrets.SF_USERNAME }}
+          SF_PASSWORD: ${{ secrets.SF_PASSWORD }}
+          SF_SECURITY_TOKEN: ${{ secrets.SF_SECURITY_TOKEN }}
+        run: |
+          python3 Onboarding-Offboarding/Deactivate_Users.py
