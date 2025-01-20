@@ -18,7 +18,7 @@ Before running this project, ensure you have the following:
 - Python 3.8 or later
 - Google Cloud service account JSON file with access to the Google Sheets API
 - A `.env` file containing your `SPREADSHEET_ID`
-- Installed Python dependencies (see [Installation](#installation))
+
 
 
 
