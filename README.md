@@ -20,12 +20,6 @@ Before running this project, ensure you have the following:
 - A `.env` file containing your `SPREADSHEET_ID`
 - Installed Python dependencies (see [Installation](#installation))
 
-## Installation
-
-1. **Clone the repository**:
-   ```bash
-   git clone https://github.com/tourlane/cn_creation.git
-   cd cn_creation
 
 
 
