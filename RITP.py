@@ -117,7 +117,7 @@ print(f"Expanded DataFrame shape: {df_raw_expanded.shape}")
 
 # Fetch Salesforce data
 try:
-    sf_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "Opportunties ID + Invoice ID", range_="A:R")
+    sf_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "Opportunties ID + Invoice ID", range_="A2:R")
 except Exception as e:
     print("Failed to fetch data from 'Opportunities ID + Invoice ID'. Please check the range or sheet name.")
     print(e)
