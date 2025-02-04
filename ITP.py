@@ -15,7 +15,7 @@ credentials = gsheet_utils.load_credentials("inv-cn-creation.json")
 service_api = gsheet_utils.build_service(credentials)
 
 ### **Step 1: Fetch Data from Performance Tab** ###
-performance_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "Performance", range_="B4:I")
+performance_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "Performance", range_="A4:I")
 df_performance = dataframe_utils.process_data_to_dataframe(performance_data)
 
 # Standardize column names
@@ -56,7 +56,7 @@ print("Updated 'DB' tab successfully.")
 
 
 # Fetch data from "RITP" tab
-ritp_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "RITP", range_="A:Z")
+ritp_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "RITP", range_="A:AA")
 df_ritp = dataframe_utils.process_data_to_dataframe(ritp_data)
 
 # Standardize column names
@@ -66,13 +66,13 @@ df_ritp.columns = df_ritp.columns.str.strip().str.lower().str.replace(" ", "_")
 columns_needed = [
     'email_address', 'location', 'address_line_1', 'city', 'post_code/zip_code', 'country',
     'file_of_contract', 'signed_date', 'tax_status', 'taxpayer_identification_number_(tin)',
-    'vat_id', 'iban', 'bic', 'account_number', 'swift', 'sales_agent'
+    'vat_id', 'iban', 'bic', 'account_number', 'swift', 'sales_agent', 'agent_code'
 ]
 
 df_ritp_filtered = df_ritp[columns_needed].copy()
 
 # Fetch current data from "DB"
-db_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "DB", range_="A:Y")
+db_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "DB", range_="A:Z")
 df_db = dataframe_utils.process_data_to_dataframe(db_data)
 
 # Standardize column names in DB as well
@@ -81,7 +81,7 @@ df_db.columns = df_db.columns.str.strip().str.lower().str.replace(" ", "_")
 # Merge based on 'email_address', ensuring we don’t overwrite existing values in DB
 df_db_updated = df_db.merge(
     df_ritp_filtered,
-    on="sales_agent",
+    on="agent_code",
     how="left",
 )
 
