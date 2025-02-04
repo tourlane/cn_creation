@@ -21,25 +21,13 @@ credentials = gsheet_utils.load_credentials("inv-cn-creation.json")
 service_api = gsheet_utils.build_service(credentials)
 
 # Fetch data from the Google Sheet
-sheet_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "DB", range_="A:BB")
+sheet_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "DB", range_="A:AD")
 
 # Process the data into a DataFrame
-df_raw = dataframe_utils.process_data_to_dataframe(sheet_data)
-
-df_raw = df_raw[df_raw['cn_number'] == '#N/A']
-
-
-# Filter data based on 'Invoice No.' column being empty
-df_false_db, df_true_db = dataframe_utils.filter_dataframe(
-    df_raw,  # The DataFrame you're working with
-    "invoice_no.",  # Column to check
-    "",  # Filter for empty values
-    (0, 54),  # Optional: Range for rows to consider
-    (0, 54)   # Optional: Additional range for column indices, if needed
-)
+df = dataframe_utils.process_data_to_dataframe(sheet_data)
 
 # Initialize the starting credit note number
-credit_note_counter = 1425
+credit_note_counter = 1445
 
 # Define the cell mapping for the "Template"
 cell_mapping = {
@@ -47,7 +35,7 @@ cell_mapping = {
     "A5": "address_line_1",
     "A6": "city_postal",
     "A7": "country",
-    "B8": "tin",
+    "B8": "taxpayer_identification_number_(tin)",
     "B9": "vat_id",
     "A11": "iban",
     "A12": "bic",
@@ -58,16 +46,16 @@ cell_mapping = {
     "B12": "swift",
     "G28": "trustpilot_review",
     "G27" : "traning_day_attendance",
+    "G10" : "location",
 }
 
 multi_row_fields = {
-    "trip_id": "A19",
-    "invoice_no.": "C19",
-    "cm1": "E19",
-    "client_type": "B19",
-    "total_bv": "D19",
-    "commission_percentage": "F19",
-    "commission": "G19"
+    "opportunity_id": "A19",
+    "trip": "C19",
+    "land_bv": "D19",
+    "land_commission": "E19",
+    "flight_commission": "F19",
+    "total_commission": "G19",
 }
 
 
@@ -103,21 +91,25 @@ def update_cell_with_delay(sheet_id, cell_range, value, credentials):
     time.sleep(2)  # Add a delay of 2 seconds to avoid rate limits
 
 
-# Group the DataFrame by "Timestamp"
-grouped = df_true_db.groupby("timestamp")
+# Group the DataFrame by "agent_code"
+grouped = df.groupby("agent_code")
 
-for timestamp, group in grouped:
-    print(f"Processing group for timestamp: {timestamp}")
+for agent_code, group in grouped:
+    print(f"Processing group for agent_code: {agent_code}")
 
-    if group["invoice_no."].notnull().all():
+    # Filter rows where 'agent_code' and 'cn_number' are "#N/A"
+    valid_group = group[(group["agent_code"] != "#N/A") & (group["cn_number"] == "#N/A")]
+
+    if not valid_group.empty:
         # Generate credit note number
-        credit_note_number = f"CN-RITP_{credit_note_counter:06}"
+        credit_note_number = f"CN-ITP_{credit_note_counter:06}"
         credit_note_counter += 1
         print(f"Generated credit note number: {credit_note_number}")
 
+
         # Copy the template sheet
         sheet_copy_name = f"{credit_note_number}"
-        gsheet_utils.copy_sheet(service_api, spreadsheet_id, "Template", sheet_copy_name)
+        gsheet_utils.copy_sheet(service_api, spreadsheet_id, "Template-ITP", sheet_copy_name)
         print(f"Copied template to: {sheet_copy_name}")
 
         # Update G6 with the credit note number
