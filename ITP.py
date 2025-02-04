@@ -53,3 +53,46 @@ df_combined.fillna("", inplace=True)  # Replace NaNs with empty strings
 gsheet_utils.update_sheet_with_dataframe(service_api, df_combined, spreadsheet_id, "DB")
 
 print("Updated 'DB' tab successfully.")
+
+
+# Fetch data from "RITP" tab
+ritp_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "RITP", range_="A:Z")
+df_ritp = dataframe_utils.process_data_to_dataframe(ritp_data)
+
+# Standardize column names
+df_ritp.columns = df_ritp.columns.str.strip().str.lower().str.replace(" ", "_")
+
+# Select the required columns from RITP
+columns_needed = [
+    'email_address', 'location', 'address_line_1', 'city', 'post_code/zip_code', 'country',
+    'file_of_contract', 'signed_date', 'tax_status', 'taxpayer_identification_number_(tin)',
+    'vat_id', 'iban', 'bic', 'account_number', 'swift', 'sales_agent'
+]
+
+df_ritp_filtered = df_ritp[columns_needed].copy()
+
+# Fetch current data from "DB"
+db_data = gsheet_utils.fetch_sheet_data(service_api, spreadsheet_id, "DB", range_="A:Y")
+df_db = dataframe_utils.process_data_to_dataframe(db_data)
+
+# Standardize column names in DB as well
+df_db.columns = df_db.columns.str.strip().str.lower().str.replace(" ", "_")
+
+# Merge based on 'email_address', ensuring we don’t overwrite existing values in DB
+df_db_updated = df_db.merge(
+    df_ritp_filtered,
+    on="sales_agent",
+    how="left",
+)
+
+# Fill missing values in DB with values from RITP (only if the field was empty)
+for col in columns_needed[1:]:  # Exclude 'email_address' since it's the key
+    df_db_updated.fillna("", inplace=True)  # Replace NaN with an empty string
+
+
+# Drop the extra columns created by merging
+df_db_updated.drop(columns=[f"{col}_ritp" for col in columns_needed[1:] if f"{col}_ritp" in df_db_updated], inplace=True)
+
+# Upload the updated data back to Google Sheets
+gsheet_utils.update_sheet_with_dataframe(service_api, df_db_updated, spreadsheet_id, "DB")
+print("Updated the DB tab successfully with RITP data.")
