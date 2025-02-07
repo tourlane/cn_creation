@@ -1,4 +1,4 @@
-# Credit Note Creation with Google Sheet Processor
+# Credit Note Creation with Google Sheets Processor
 
 
 This project automates data processing and credit note creation in Google Sheets. It leverages Python, Google Sheets API, and Pandas to handle operations such as fetching data, applying templates, updating cells, and calculating taxes dynamically based on input data.
