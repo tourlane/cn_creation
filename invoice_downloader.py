@@ -1,3 +1,10 @@
+"""Authenticate with Salesforce using OAuth2 or API Token.
+Query invoices where Payment Method is "Influencer Invoice" or "Marketing."
+Retrieve attachments from the "Notes & Attachments" section.
+Download the first PDF file from each invoice.
+Save the file locally or upload it elsewhere (e.g., Google Drive, AWS S3)"""
+
+
 from simple_salesforce import Salesforce
 import requests
 import os
