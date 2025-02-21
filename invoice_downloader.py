@@ -9,11 +9,11 @@ from simple_salesforce import Salesforce
 import requests
 import os
 
-# Salesforce credentials
-SF_USERNAME = "your_username"
-SF_PASSWORD = "your_password"
-SF_SECURITY_TOKEN = "your_security_token"
-SF_DOMAIN = "your_domain"
+# Salesforce credentials [it will be added to an .env file and won't be mentioned here]
+SF_USERNAME = "username"
+SF_PASSWORD = "password"
+SF_SECURITY_TOKEN = "security_token"
+SF_DOMAIN = "domain"
 
 # Connect to Salesforce
 sf = Salesforce(username=SF_USERNAME, password=SF_PASSWORD, security_token=SF_SECURITY_TOKEN, domain=SF_DOMAIN)
